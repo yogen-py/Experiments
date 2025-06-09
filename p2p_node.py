@@ -26,7 +26,7 @@ async def main():
         return
 
     print("[DEBUG] Loading interfaces...")
-    ifs = await load_interfaces(names)
+    ifs = await load_interfaces(["eno1"])
     print(f"[DEBUG] Loaded interfaces: {[iface.name for iface in ifs]}")
     for iface in ifs:
         print(f"  -> {iface.name}: {iface.addrs}")
