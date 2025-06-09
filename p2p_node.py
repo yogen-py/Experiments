@@ -1,61 +1,59 @@
 import asyncio
 from p2pd import *
-import sys
+from p2pd.interface import list_interfaces, load_interfaces
 
-# 👊 Your callback – reacts to incoming messages
+# 🧠 Callback when a message arrives
 async def msg_cb(msg, client_tup, pipe):
     print(f"\n[RECV] From {client_tup}: {msg.decode(errors='ignore')}")
     if b"PING" in msg:
+        print(f"[RESPONDING] Sending PONG to {client_tup}")
         await pipe.send(b"PONG", client_tup)
     elif b"PONG" in msg:
         print(f"[INFO] Got PONG from {client_tup}")
 
-# 👊 Send a message to all connected peers
+# 🧠 Periodically send PING to all known peers
 async def broadcast_ping(node):
     while True:
-        await asyncio.sleep(10)  # slap every 10s
+        await asyncio.sleep(10)  # every 10 seconds
         peers = await node.peers()
+        if peers:
+            print(f"[PEERS] Currently connected to: {peers}")
+        else:
+            print("[PEERS] No connected peers found.")
+
         for peer in peers:
             print(f"[SEND] PING to {peer}")
             await node.send(b"PING", peer)
 
-# 👊 MAIN FUNCTION
+# 🧠 Main runner
 async def main():
-    # 👇 Replace this with your real NIC name from `ip addr`
-    INTERFACE_NAME = "enp2s0"  # <-- change me on each machine if needed
+    print("[BOOT] Listing interfaces...")
+    if_names = await list_interfaces()
+    ifs = await load_interfaces(if_names)
 
-    try:
-        iface = await load_interface(INTERFACE_NAME)
-        if iface is None:
-            print(f"[FATAL] Interface {INTERFACE_NAME} could not be loaded.")
-            sys.exit(1)
-    except Exception as e:
-        print(f"[FATAL] Failed to load {INTERFACE_NAME}: {e}")
-        sys.exit(1)
+    if not ifs:
+        raise Exception("No valid network interfaces loaded. Check your NICs.")
 
     node_conf = dict_child({
-        "enable_upnp": False,
+        "enable_upnp": False,  # we’re on LAN, we don’t need this
         "sig_pipe_no": SIGNAL_PIPE_NO,
     }, NET_CONF)
 
-    # Fire up the node
-    node = await P2PNode(ifs=[iface], port=1337, conf=node_conf)
+    node = await P2PNode(ifs=ifs, port=1337, conf=node_conf)
     node.add_msg_cb(msg_cb)
 
-    print(f"[BOOT] Node running on {INTERFACE_NAME}, port 1337")
-    print(f"[INFO] Node ID: {node.id}")
-    
-    # Optional: print current peers every 10s
+    print(f"[STARTED] P2P Node is running on port 1337")
+    print(f"[NODE ID] {node.id}")
+
+    # Start periodic PING broadcast
     asyncio.create_task(broadcast_ping(node))
 
-    # Run forever
     try:
         while True:
             await asyncio.sleep(60)
     except KeyboardInterrupt:
-        print("\n[SHUTDOWN] Closing node.")
+        print("\n[SHUTDOWN] Killing node...")
         await node.close()
 
-# Run it like a demon
 if __name__ == "__main__":
     asyncio.run(main())
